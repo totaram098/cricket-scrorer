@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#007bff">
+    <title>Cricket Scoring PWA</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { text-align: center; padding: 20px; }
+        .score-box { font-size: 24px; margin: 10px 0; font-weight: 500; }
+        .over-tracker { display: flex; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+        .over-tracker div { margin: 5px; padding: 5px 10px; border: 1px solid #000; border-radius: 5px; background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="my-3">Cricket Scoring App</h1>
+        <div class="d-flex justify-content-between">
+            <div class="score-box">Runs: <span id="runs">0</span></div>
+            <div class="score-box">Wickets: <span id="wickets">0</span></div>
+            <div class="score-box">Overs: <span id="overs">0</span></div>
+            <div class="score-box" id="targetBox" style="display: none;">Target: <span id="target">0</span></div>
+        </div>
+
+        <button class="btn btn-success my-3" onclick="newInning()">New Inning</button>
+        
+        <div class="over-tracker" id="overTracker"></div>
+        <div class="container mt-3">
+            <div class="row gx-2 gy-2">
+                <!-- Column 1: Normal Runs -->
+                <div class="col-3 d-flex flex-column gap-2">
+                    <button class="btn btn-primary w-100 score-btn" onclick="updateScore(1)" disabled>1</button>
+                    <button class="btn btn-primary w-100 score-btn" onclick="updateScore(2)" disabled>2</button>
+                    <button class="btn btn-primary w-100 score-btn" onclick="updateScore(3)" disabled>3</button>
+                    <button class="btn btn-primary w-100 score-btn" onclick="updateScore(4)" disabled>4</button>
+                    <button class="btn btn-primary w-100 score-btn" onclick="updateScore(6)" disabled>6</button>
+                </div>
+
+                <!-- Column 2: Wide Ball (WD) Values -->
+                <div class="col-3 d-flex flex-column gap-2">
+                    <button class="btn btn-warning w-100 score-btn" onclick="addExtra('WD')" disabled>WD</button>
+                    <button class="btn btn-warning w-100 score-btn" onclick="addExtra('WD', 1)" disabled>WD + 1</button>
+                    <button class="btn btn-warning w-100 score-btn" onclick="addExtra('WD', 2)" disabled>WD + 2</button>
+                    <button class="btn btn-warning w-100 score-btn" onclick="addExtra('WD', 3)" disabled>WD + 3</button>
+                    <button class="btn btn-warning w-100 score-btn" onclick="addExtra('WD', 4)" disabled>WD + 4</button>
+                    <button class="btn btn-warning w-100 score-btn" onclick="addExtra('WD', 6)" disabled>WD + 6</button>
+                </div>
+
+                <!-- Column 3: No Ball (NB) Values -->
+                <div class="col-3 d-flex flex-column gap-2">
+                    <button class="btn btn-danger w-100 score-btn" onclick="addExtra('NB')" disabled>NB</button>
+                    <button class="btn btn-danger w-100 score-btn" onclick="addExtra('NB', 1)" disabled>NB + 1</button>
+                    <button class="btn btn-danger w-100 score-btn" onclick="addExtra('NB', 2)" disabled>NB + 2</button>
+                    <button class="btn btn-danger w-100 score-btn" onclick="addExtra('NB', 3)" disabled>NB + 3</button>
+                    <button class="btn btn-danger w-100 score-btn" onclick="addExtra('NB', 4)" disabled>NB + 4</button>
+                    <button class="btn btn-danger w-100 score-btn" onclick="addExtra('NB', 6)" disabled>NB + 6</button>
+                </div>
+
+                <!-- Column 4: Dot, Wicket, Undo, Redo, Reset -->
+                <div class="col-3 d-flex flex-column gap-2">
+                    <button class="btn btn-secondary w-100 score-btn" onclick="addDotBall()" disabled>Dot</button>
+                    <button class="btn btn-dark w-100 score-btn" onclick="addWicket()" disabled>W</button>
+                    <button class="btn btn-info w-100 score-btn" onclick="undo()" disabled>Undo</button>
+                    <button class="btn btn-info w-100 score-btn" onclick="redo()" disabled>Redo</button>
+                    <button class="btn btn-danger w-100" onclick="resetAll()">Reset</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="inningsHistory"></div>
+    </div>
+
+    <script>
+        let score = { runs: 0, wickets: 0, balls: 0, overs: 0 };
+        let isFirstBall = true;
+        let innings = [];
+        let currentInning = 1;
+        let target = 0;
+        let oversLimit = 0;
+        let redoStack = []; // To store redo history
+        let historyStack = []; // Stores previous states for Undo
+
+        function saveState() {
+            if (historyStack.length >= 2) historyStack.shift(); // Maintain only last 2 states
+            historyStack.push({
+                runs: score.runs,
+                wickets: score.wickets,
+                balls: score.balls,
+                overs: score.overs,
+                overTrackerHTML: document.getElementById('overTracker').innerHTML // Save over tracker state
+            });
+            redoStack = []; // Clear redo history on new action
+        }
+
+        function undo() {
+            if (historyStack.length > 0) {
+                redoStack.push({ ...score, overTrackerHTML: document.getElementById('overTracker').innerHTML }); // Save current state for redo
+                let prevState = historyStack.pop();
+                score = { runs: prevState.runs, wickets: prevState.wickets, balls: prevState.balls, overs: prevState.overs };
+                document.getElementById('overTracker').innerHTML = prevState.overTrackerHTML; // Restore over tracker
+                updateUI();
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                historyStack.push({ ...score, overTrackerHTML: document.getElementById('overTracker').innerHTML }); // Save current state for undo
+                let nextState = redoStack.pop();
+                score = { runs: nextState.runs, wickets: nextState.wickets, balls: nextState.balls, overs: nextState.overs };
+                document.getElementById('overTracker').innerHTML = nextState.overTrackerHTML; // Restore over tracker
+                updateUI();
+            }
+        }
+
+        function enableButtons(enable) {
+            document.querySelectorAll('.score-btn').forEach(button => button.disabled = !enable);
+        }
+
+        function updateUI() {
+            document.getElementById('runs').innerText = score.runs;
+            document.getElementById('wickets').innerText = score.wickets;
+            document.getElementById('overs').innerText = score.overs;
+            if (currentInning % 2 === 0) {
+                document.getElementById('targetBox').style.display = 'block';
+                document.getElementById('target').innerText = target;
+            } else {
+                document.getElementById('targetBox').style.display = 'none';
+            }
+        }
+
+        function updateScore(runs) {
+            if (score.overs >= oversLimit) {
+                alert("Overs completed! Please start a new inning.");
+                return;
+            }
+            saveState();
+            score.runs += runs;
+            addBall(runs);
+            updateUI();
+        }
+
+        function addExtra(type, additionalRuns = 0) {
+            if (score.overs >= oversLimit) {
+                alert("Overs completed! Please start a new inning.");
+                return;
+            }
+            saveState(); // Save before modifying
+
+            let extraRuns = 1; // NB & WD give 1 run by default
+            if (type === "NB" || type === "WD") {
+                extraRuns += additionalRuns; // Add runs scored on No Ball (e.g., 6)
+            } 
+            type = (additionalRuns === 0) ? type : type + "+" +additionalRuns;
+            score.runs += extraRuns;
+            addBall(type, false); // Extra ball should NOT count in over
+            updateUI();
+        }
+
+        function addDotBall() {
+            if (score.overs >= oversLimit) {
+                alert("Overs completed! Please start a new inning.");
+                return;
+            }
+            saveState();
+            addBall('•');
+            updateUI();
+        }
+
+        function addWicket() {
+            if (score.overs >= oversLimit) {
+                alert("Overs completed! Please start a new inning.");
+                return;
+            }
+            saveState();
+            score.wickets += 1;
+            addBall('W');
+            updateUI();
+        }
+
+        function addBall(ballType = '•', countAsBall = true) {
+            const overTracker = document.getElementById('overTracker');
+            if (score.balls === 0 && isFirstBall) {
+                overTracker.innerHTML = ''; // Remove previous over's balls on first ball of new over
+                isFirstBall = false;
+            }
+            
+            const ballDiv = document.createElement('div');
+            ballDiv.innerText = ballType;
+            overTracker.appendChild(ballDiv);
+            
+            if (countAsBall) {
+                score.balls += 1;
+                if (score.balls >= 6) {
+                    score.overs += 1;
+                    score.balls = 0;
+                    isFirstBall = true;
+                }
+            }
+            updateUI();
+        }
+
+        function newInning() {
+            innings.push({ runs: score.runs, wickets: score.wickets, overs: score.overs });
+            if (currentInning % 2 === 1) target = score.runs + 1;
+            displayInnings();
+            score = { runs: 0, wickets: 0, balls: 0, overs: 0 };
+            document.getElementById('overTracker').innerHTML = '';
+            currentInning++;
+            promptForOvers();
+            updateUI();
+        }
+
+        function displayInnings() {
+            let historyDiv = document.getElementById('inningsHistory');
+            historyDiv.innerHTML = "";
+            innings.forEach((inning, index) => {
+                historyDiv.innerHTML += `<hr><p>Inning ${index + 1}: Runs - ${inning.runs}, Wickets - ${inning.wickets}, Overs - ${inning.overs} ${(index+1) % 2 !== 0 ? ', Target - ' + (inning.runs+1) : ''}</p>`;
+            });
+        }
+
+        function promptForOvers() {
+            if (currentInning % 2 === 1) {
+                let oversInput;
+                do {
+                    oversInput = prompt("Enter overs for this inning:", "10");
+                } while (!oversInput || isNaN(oversInput) || oversInput <= 0);
+                oversLimit = parseInt(oversInput);
+            }
+            enableButtons(true);
+        }
+        function resetAll() {
+            if (confirm("Are you sure you want to reset everything? This action cannot be undone!")) {
+                // Reset all scores and data
+                score = { runs: 0, wickets: 0, balls: 0, overs: 0 };
+                innings = [];
+                currentInning = 1;
+                target = 0;
+                oversLimit = 0;
+
+                // Clear the over tracker and innings history
+                document.getElementById('overTracker').innerHTML = '';
+                document.getElementById('inningsHistory').innerHTML = '';
+
+                // Prompt for overs again
+                promptForOvers();
+
+                // Update UI
+                updateUI();
+            }
+        }
+
+        promptForOvers();
+        displayInnings();
+        updateUI();
+    </script>
+
+</body>
+</html>
