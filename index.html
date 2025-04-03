@@ -121,7 +121,7 @@
         function updateUI() {
             document.getElementById('runs').innerText = score.runs;
             document.getElementById('wickets').innerText = score.wickets;
-            document.getElementById('overs').innerText = score.overs+"/"+score.balls;
+            document.getElementById('overs').innerText = (score.overs+"."+score.balls);
             if (currentInning % 2 === 0) {
                 document.getElementById('targetBox').style.display = 'block';
                 document.getElementById('target').innerText = target;
